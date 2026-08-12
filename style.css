@@ -115,6 +115,13 @@ legend {
   font-weight: 800;
 }
 
+.field-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .compact {
   margin: 0;
 }
@@ -209,10 +216,45 @@ fieldset {
 .practice-prompt {
   border-left: 4px solid var(--brand);
   background: var(--soft);
-  margin: 14px 0;
+  margin: 14px 0 8px;
   padding: 10px 12px;
   border-radius: 0 8px 8px 0;
   font-weight: 800;
+}
+
+.practice-detail {
+  margin: 0 0 12px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.practice-guide {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.practice-guide h2 {
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.practice-guide dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.practice-guide dt {
+  font-weight: 900;
+}
+
+.practice-guide dd {
+  margin: 2px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .memo {

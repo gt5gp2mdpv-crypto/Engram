@@ -4,6 +4,13 @@ const NOTE_STORE = "notes";
 const LOG_STORE = "reviewLogs";
 const SETTINGS_STORE = "settings";
 const PRACTICE_TYPES = ["用語再生", "説明再生", "比較", "適用", "白紙再現"];
+const PRACTICE_DESCRIPTIONS = {
+  用語再生: "用語・公式・年号を、紙ノートを見ずに答える。",
+  説明再生: "仕組みや流れを、自分の言葉で説明する。",
+  比較: "AとBの違い、共通点、使い分けを説明する。",
+  適用: "例題・類題・別の場面に知識を使ってみる。",
+  白紙再現: "題名だけを見て、ノートの構造を何も見ずに書き出す。"
+};
 const RATING_RETENTION = [0.2, 0.4, 0.6, 0.75, 0.9, 0.97];
 const RATING_LABELS = [
   "0 全く無理",
@@ -93,6 +100,7 @@ function setupStaticUi() {
   document.getElementById("calendarTime").value = settings.calendarTime;
   document.getElementById("targetRetention").value = String(settings.targetRetention);
   renderPracticeChecks();
+  renderPracticeGuide();
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => showScreen(tab.dataset.screen));
@@ -123,8 +131,19 @@ function renderPracticeChecks() {
   PRACTICE_TYPES.forEach((type, index) => {
     const label = document.createElement("label");
     label.className = "check-option";
+    label.title = PRACTICE_DESCRIPTIONS[type];
     label.innerHTML = `<input type="checkbox" value="${type}" ${index < 2 ? "checked" : ""}> <span>${type}</span>`;
     host.append(label);
+  });
+}
+
+function renderPracticeGuide() {
+  const host = document.getElementById("practiceGuideList");
+  host.innerHTML = "";
+  PRACTICE_TYPES.forEach((type) => {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `<dt>${type}</dt><dd>${PRACTICE_DESCRIPTIONS[type]}</dd>`;
+    host.append(wrapper);
   });
 }
 
@@ -203,6 +222,7 @@ function renderReviewCard(note, retention) {
   card.querySelector(".item-title").textContent = note.title;
   card.querySelector(".retention-badge").textContent = `${Math.round(retention * 100)}%`;
   card.querySelector(".practice-prompt").textContent = `${practiceType}: 紙ノートを閉じて、先に自力で思い出す`;
+  card.querySelector(".practice-detail").textContent = PRACTICE_DESCRIPTIONS[practiceType];
   card.querySelector(".memo").textContent = note.memo || "";
   const ratings = card.querySelector(".rating-grid");
   RATING_LABELS.forEach((label, rating) => {

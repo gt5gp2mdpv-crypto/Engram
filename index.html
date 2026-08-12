@@ -80,8 +80,13 @@
           </label>
           <fieldset class="field">
             <legend>おすすめ練習形式</legend>
+            <p class="field-help">このノートで使いやすい復習方法を選びます。複数選ぶと、復習時に定着度に合わせてアプリが1つ指示します。</p>
             <div class="check-grid" id="practiceChecks"></div>
           </fieldset>
+          <div class="practice-guide" aria-label="練習形式の説明">
+            <h2>練習形式の目安</h2>
+            <dl id="practiceGuideList"></dl>
+          </div>
           <label class="field">
             <span>メモ</span>
             <textarea id="memoInput" rows="4" placeholder="紙ノートの位置、試験範囲、注意点など"></textarea>
@@ -164,6 +169,7 @@
         <span class="retention-badge"></span>
       </div>
       <p class="practice-prompt"></p>
+      <p class="practice-detail"></p>
       <p class="memo"></p>
       <div class="rating-grid"></div>
     </article>
