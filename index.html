@@ -63,6 +63,10 @@
             <input id="subjectInput" required autocomplete="off" placeholder="数学">
           </label>
           <label class="field">
+            <span>ノート名</span>
+            <input id="notebookNameInput" autocomplete="off" placeholder="メイン1冊目 / 解きなおし用">
+          </label>
+          <label class="field">
             <span>番号</span>
             <input id="numberInput" required autocomplete="off" placeholder="12">
           </label>
@@ -92,11 +96,11 @@
             <span>並び順</span>
             <select id="sortMode">
               <option value="nextReviewAt">復習日順</option>
-              <option value="subject">教科・番号順</option>
+              <option value="subject">教科・ノート・番号順</option>
               <option value="createdAt">登録順</option>
             </select>
           </label>
-          <input class="search" id="searchInput" placeholder="教科・番号・題名で検索">
+          <input class="search" id="searchInput" placeholder="教科・ノート名・番号・題名で検索">
         </div>
         <div id="noteList" class="stack"></div>
         <p class="empty-state" id="emptyList">まだノートが登録されていません。</p>

@@ -1,5 +1,5 @@
 const DB_NAME = "note-review-pwa";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const NOTE_STORE = "notes";
 const LOG_STORE = "reviewLogs";
 const SETTINGS_STORE = "settings";
@@ -34,12 +34,21 @@ function openDb() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const database = request.result;
-      const notesStore = database.createObjectStore(NOTE_STORE, { keyPath: "id" });
-      notesStore.createIndex("nextReviewAt", "nextReviewAt");
-      notesStore.createIndex("subject", "subject");
-      const logsStore = database.createObjectStore(LOG_STORE, { keyPath: "id" });
-      logsStore.createIndex("noteItemId", "noteItemId");
-      database.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
+      const notesStore = database.objectStoreNames.contains(NOTE_STORE)
+        ? request.transaction.objectStore(NOTE_STORE)
+        : database.createObjectStore(NOTE_STORE, { keyPath: "id" });
+      if (!notesStore.indexNames.contains("nextReviewAt")) notesStore.createIndex("nextReviewAt", "nextReviewAt");
+      if (!notesStore.indexNames.contains("subject")) notesStore.createIndex("subject", "subject");
+      if (!notesStore.indexNames.contains("notebookName")) notesStore.createIndex("notebookName", "notebookName");
+
+      const logsStore = database.objectStoreNames.contains(LOG_STORE)
+        ? request.transaction.objectStore(LOG_STORE)
+        : database.createObjectStore(LOG_STORE, { keyPath: "id" });
+      if (!logsStore.indexNames.contains("noteItemId")) logsStore.createIndex("noteItemId", "noteItemId");
+
+      if (!database.objectStoreNames.contains(SETTINGS_STORE)) {
+        database.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -133,7 +142,7 @@ function showScreen(name) {
 }
 
 async function refresh() {
-  notes = await getAll(NOTE_STORE);
+  notes = (await getAll(NOTE_STORE)).map(normalizeNote);
   renderToday();
   renderList();
 }
@@ -145,6 +154,7 @@ async function addNote(event) {
   const note = {
     id: crypto.randomUUID(),
     subject: document.getElementById("subjectInput").value.trim(),
+    notebookName: document.getElementById("notebookNameInput").value.trim(),
     number: document.getElementById("numberInput").value.trim(),
     title: document.getElementById("titleInput").value.trim(),
     firstStudiedAt: new Date(document.getElementById("firstStudiedInput").value).toISOString(),
@@ -189,7 +199,7 @@ function renderReviewCard(note, retention) {
   const template = document.getElementById("reviewCardTemplate");
   const card = template.content.firstElementChild.cloneNode(true);
   const practiceType = choosePracticeType(note, retention);
-  card.querySelector(".item-meta").textContent = `${note.subject} / ${note.number} / 次回 ${formatDate(new Date(note.nextReviewAt))}`;
+  card.querySelector(".item-meta").textContent = `${formatNoteLocation(note)} / 次回 ${formatDate(new Date(note.nextReviewAt))}`;
   card.querySelector(".item-title").textContent = note.title;
   card.querySelector(".retention-badge").textContent = `${Math.round(retention * 100)}%`;
   card.querySelector(".practice-prompt").textContent = `${practiceType}: 紙ノートを閉じて、先に自力で思い出す`;
@@ -209,10 +219,10 @@ function renderList() {
   const host = document.getElementById("noteList");
   const query = document.getElementById("searchInput").value.trim().toLowerCase();
   const sortMode = document.getElementById("sortMode").value;
-  let visible = notes.filter((note) => `${note.subject} ${note.number} ${note.title}`.toLowerCase().includes(query));
+  let visible = notes.filter((note) => `${note.subject} ${note.notebookName} ${note.number} ${note.title}`.toLowerCase().includes(query));
 
   visible = visible.sort((a, b) => {
-    if (sortMode === "subject") return `${a.subject}${a.number}`.localeCompare(`${b.subject}${b.number}`, "ja");
+    if (sortMode === "subject") return `${a.subject}${a.notebookName}${a.number}`.localeCompare(`${b.subject}${b.notebookName}${b.number}`, "ja");
     if (sortMode === "createdAt") return new Date(b.createdAt) - new Date(a.createdAt);
     return new Date(a.nextReviewAt) - new Date(b.nextReviewAt);
   });
@@ -225,7 +235,7 @@ function renderList() {
 function renderNoteCard(note) {
   const template = document.getElementById("noteCardTemplate");
   const card = template.content.firstElementChild.cloneNode(true);
-  card.querySelector(".item-meta").textContent = `${note.subject} / ${note.number}`;
+  card.querySelector(".item-meta").textContent = formatNoteLocation(note);
   card.querySelector(".item-title").textContent = note.title;
   card.querySelector(".date-badge").textContent = formatDate(new Date(note.nextReviewAt));
   card.querySelector(".memo").textContent = `推定定着率 ${Math.round(estimateRetention(note) * 100)}%${note.memo ? "\n" + note.memo : ""}`;
@@ -236,7 +246,7 @@ function renderNoteCard(note) {
     document.getElementById("emptyToday").style.display = "none";
   });
   card.querySelector(".delete").addEventListener("click", async () => {
-    if (!confirm(`${note.subject} ${note.number} ${note.title} を削除しますか？`)) return;
+    if (!confirm(`${formatNoteLocation(note)} ${note.title} を削除しますか？`)) return;
     const logs = (await getAll(LOG_STORE)).filter((log) => log.noteItemId === note.id);
     await Promise.all(logs.map((log) => remove(LOG_STORE, log.id)));
     await remove(NOTE_STORE, note.id);
@@ -375,7 +385,7 @@ function createIcsEvent(note) {
   const end = new Date(start.getTime() + 20 * 60 * 1000);
   const retention = Math.round(estimateRetention(note, start) * 100);
   const practiceType = choosePracticeType(note, retention / 100);
-  const title = `復習: ${note.subject} ${note.number} ${note.title}`;
+  const title = `復習: ${formatNoteLocation(note)} ${note.title}`;
   const body = `${practiceType}。紙ノートを閉じて先に自力で思い出す。推定定着率 ${retention}%。`;
   return [
     "BEGIN:VEVENT",
@@ -410,6 +420,17 @@ function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
+}
+
+function normalizeNote(note) {
+  return {
+    ...note,
+    notebookName: note.notebookName || ""
+  };
+}
+
+function formatNoteLocation(note) {
+  return [note.subject, note.notebookName, note.number].filter(Boolean).join(" / ");
 }
 
 function avg(values) {
