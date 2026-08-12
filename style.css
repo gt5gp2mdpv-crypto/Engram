@@ -1,0 +1,357 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f5ef;
+  --surface: #ffffff;
+  --ink: #1c2522;
+  --muted: #65716d;
+  --line: #d8ded6;
+  --brand: #1f6f68;
+  --brand-strong: #16534e;
+  --accent: #b84a3a;
+  --soft: #e5f0ed;
+  --shadow: 0 12px 30px rgba(31, 47, 43, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.app-shell {
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) 16px calc(84px + env(safe-area-inset-bottom));
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0 14px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 26px;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+.today-pill,
+.retention-badge,
+.date-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--brand-strong);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 14px;
+}
+
+.field span,
+legend {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.compact {
+  margin: 0;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 12px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+fieldset {
+  border: 0;
+  padding: 0;
+}
+
+.primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.wide {
+  width: 100%;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.summary-grid > div,
+.form-panel,
+.help-panel,
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.summary-grid > div {
+  padding: 12px;
+}
+
+.metric {
+  display: block;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.metric-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+.card,
+.form-panel,
+.help-panel {
+  padding: 14px;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.item-meta {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.practice-prompt {
+  border-left: 4px solid var(--brand);
+  background: var(--soft);
+  margin: 14px 0;
+  padding: 10px 12px;
+  border-radius: 0 8px 8px 0;
+  font-weight: 800;
+}
+
+.memo {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.rating-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.rating-grid button {
+  min-height: 50px;
+  padding: 6px;
+  font-size: 12px;
+}
+
+.check-grid,
+.button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.check-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.check-option input {
+  width: auto;
+}
+
+.search {
+  align-self: end;
+}
+
+.card-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.danger {
+  color: var(--accent);
+}
+
+.file-button {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 800;
+}
+
+.file-button input {
+  display: none;
+}
+
+.note,
+.help-panel li {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.help-panel {
+  margin-top: 12px;
+}
+
+.help-panel h2 {
+  margin-bottom: 10px;
+}
+
+.empty-state {
+  display: none;
+  color: var(--muted);
+  line-height: 1.7;
+  padding: 22px 8px;
+  text-align: center;
+}
+
+.tabbar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: rgba(247, 245, 239, 0.94);
+  backdrop-filter: blur(16px);
+}
+
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.tab.active {
+  background: var(--brand);
+  color: #fff;
+}
+
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  left: 16px;
+  display: none;
+  border-radius: 8px;
+  background: #1c2522;
+  color: #fff;
+  padding: 12px 14px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.toast.show {
+  display: block;
+}
+
+@media (min-width: 760px) {
+  .app-shell {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+}
