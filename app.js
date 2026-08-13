@@ -109,7 +109,13 @@ function setupStaticUi() {
   document.getElementById("buildSessionBtn").addEventListener("click", renderToday);
   document.getElementById("sortMode").addEventListener("change", renderList);
   document.getElementById("searchInput").addEventListener("input", renderList);
+  document.getElementById("subjectFilter").addEventListener("change", () => {
+    renderNotebookFilter();
+    renderList();
+  });
   document.getElementById("notebookFilter").addEventListener("change", renderList);
+  document.getElementById("subjectInput").addEventListener("input", renderNotebookChips);
+  document.getElementById("notebookNameInput").addEventListener("input", renderNotebookChips);
   document.getElementById("noteForm").addEventListener("submit", addNote);
   document.getElementById("exportJsonBtn").addEventListener("click", exportJson);
   document.getElementById("exportIcsBtn").addEventListener("click", exportIcs);
@@ -164,7 +170,9 @@ function showScreen(name) {
 async function refresh() {
   notes = (await getAll(NOTE_STORE)).map(normalizeNote);
   renderNotebookOptions();
+  renderSubjectFilter();
   renderNotebookFilter();
+  renderNotebookChips();
   renderToday();
   renderList();
 }
@@ -242,8 +250,12 @@ function renderList() {
   const host = document.getElementById("noteList");
   const query = document.getElementById("searchInput").value.trim().toLowerCase();
   const sortMode = document.getElementById("sortMode").value;
+  const subjectFilter = document.getElementById("subjectFilter").value;
   const notebookFilter = document.getElementById("notebookFilter").value;
   let visible = notes.filter((note) => `${note.subject} ${note.notebookName} ${note.number} ${note.title}`.toLowerCase().includes(query));
+  if (subjectFilter) {
+    visible = visible.filter((note) => note.subject === subjectFilter);
+  }
   if (notebookFilter) {
     visible = visible.filter((note) => note.notebookName === notebookFilter);
   }
@@ -450,14 +462,23 @@ function download(filename, content, type) {
 }
 
 function registerServiceWorker() {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("sw.js").then((registration) => {
+    registration.addEventListener("updatefound", () => {
+      const newWorker = registration.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener("statechange", () => {
+        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+          toast("新しいバージョンがあります。再読み込みしてください");
+        }
+      });
+    });
+  }).catch(() => {});
 }
 
 function normalizeNote(note) {
   const now = new Date().toISOString();
-  const id = note.id || crypto.randomUUID();
+  const id = note.id || stableNoteId(note);
   const createdAt = safeIso(note.createdAt, now);
   const updatedAt = safeIso(note.updatedAt, createdAt);
   const firstStudiedAt = safeIso(note.firstStudiedAt, createdAt);
@@ -476,6 +497,20 @@ function normalizeNote(note) {
     createdAt,
     updatedAt
   };
+}
+
+function stableNoteId(note) {
+  const source = [note.subject, note.notebookName, note.number, note.title].filter(Boolean).join("|");
+  return "legacy-" + hashString(source);
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
 }
 
 function normalizeReviewLog(log) {
@@ -502,10 +537,27 @@ function normalizeBackupPayload(payload) {
       ? payload
       : null;
   if (!rawNotes) return null;
+  const notes = rawNotes.map(normalizeNote);
+  const idMap = new Map();
+  rawNotes.forEach((raw, index) => {
+    const normalized = notes[index];
+    if (!raw.id) {
+      idMap.set(stableNoteId(raw), normalized.id);
+    }
+  });
+  const reviewLogs = Array.isArray(payload?.reviewLogs)
+    ? payload.reviewLogs.map((log) => {
+        const normalized = normalizeReviewLog(log);
+        if (log.noteItemId && idMap.has(log.noteItemId)) {
+          normalized.noteItemId = idMap.get(log.noteItemId);
+        }
+        return normalized;
+      })
+    : [];
   return {
     settings: payload?.settings || null,
-    notes: rawNotes.map(normalizeNote),
-    reviewLogs: Array.isArray(payload?.reviewLogs) ? payload.reviewLogs.map(normalizeReviewLog) : []
+    notes,
+    reviewLogs
   };
 }
 
@@ -525,25 +577,67 @@ function renderNotebookOptions() {
   });
 }
 
+function renderSubjectFilter() {
+  const select = document.getElementById("subjectFilter");
+  const current = select.value;
+  select.innerHTML = '<option value="">すべての教科</option>';
+  uniqueSubjects().forEach((subject) => {
+    const option = document.createElement("option");
+    option.value = subject;
+    option.textContent = subject;
+    select.append(option);
+  });
+  select.value = uniqueSubjects().includes(current) ? current : "";
+}
+
 function renderNotebookFilter() {
   const select = document.getElementById("notebookFilter");
   const current = select.value;
+  const subjectFilter = document.getElementById("subjectFilter").value;
+  const names = subjectFilter ? uniqueNotebookNamesForSubject(subjectFilter) : uniqueNotebookNames();
   select.innerHTML = '<option value="">すべてのノート</option>';
-  uniqueNotebookNames().forEach((name) => {
+  names.forEach((name) => {
     const option = document.createElement("option");
     option.value = name;
     option.textContent = name;
     select.append(option);
   });
-  select.value = uniqueNotebookNames().includes(current) ? current : "";
+  select.value = names.includes(current) ? current : "";
+}
+
+function renderNotebookChips() {
+  const host = document.getElementById("notebookNameChips");
+  const subject = document.getElementById("subjectInput").value.trim();
+  const current = document.getElementById("notebookNameInput").value.trim();
+  const names = subject ? uniqueNotebookNamesForSubject(subject) : uniqueNotebookNames();
+  host.innerHTML = "";
+  names.forEach((name) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip" + (name === current ? " active" : "");
+    chip.textContent = name;
+    chip.addEventListener("click", () => {
+      document.getElementById("notebookNameInput").value = name;
+      renderNotebookChips();
+    });
+    host.append(chip);
+  });
 }
 
 function formatNoteLocation(note) {
   return [note.subject, note.notebookName, note.number].filter(Boolean).join(" / ");
 }
 
+function uniqueSubjects() {
+  return [...new Set(notes.map((note) => note.subject).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
 function uniqueNotebookNames() {
   return [...new Set(notes.map((note) => note.notebookName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
+function uniqueNotebookNamesForSubject(subject) {
+  return [...new Set(notes.filter((note) => note.subject === subject).map((note) => note.notebookName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
 }
 
 function safeIso(value, fallback) {
