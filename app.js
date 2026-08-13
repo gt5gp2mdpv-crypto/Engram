@@ -526,31 +526,28 @@ async function enablePush() {
     return;
   }
   if (Notification.permission === "denied") {
-    toast("Safariの設定から通知を許可してください");
+    toast("Safariの設定で通知を許可してください");
     return;
   }
-  if (Notification.permission === "default") {
-    const result = await Notification.requestPermission();
-    if (result !== "granted") {
-      toast("通知が許可されませんでした");
-      return;
-    }
+
+  // サーバーURLの事前チェック
+  const url = settings.pushServerUrl.replace(/\/+$/, "");
+  if (!url) {
+    toast("先に通知サーバーURLを入力してください");
+    return;
   }
 
   try {
+    // iOS 17.4以降では requestPermission() ではダイアログが出ず、
+    // pushManager.subscribe() が許可ダイアログを表示する。
+    // そのため requestPermission() をスキップして subscribe() に直接進む。
     const registration = await navigator.serviceWorker.ready;
     pushSubscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: await getVapidPublicKey()
     });
+
     // サーバーに購読登録
-    const url = settings.pushServerUrl.replace(/\/+$/, "");
-    if (!url) {
-      toast("通知サーバーURLを入力してください");
-      pushSubscription.unsubscribe().catch(() => {});
-      pushSubscription = null;
-      return;
-    }
     const subscribeResponse = await fetch(`${url}/subscribe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -567,7 +564,48 @@ async function enablePush() {
     toast("通知を設定しました");
   } catch (error) {
     console.error("購読登録に失敗:", error);
-    toast("通知の設定に失敗しました。サーバーURLを確認してください");
+
+    // subscribe() が失敗した場合は古いiOS向けに requestPermission() を試す
+    if (Notification.permission === "default" && typeof Notification.requestPermission === "function") {
+      try {
+        // Promise形式とコールバック形式の両方に対応
+        const permission = await new Promise((resolve) => {
+          const result = Notification.requestPermission((perm) => resolve(perm));
+          if (result && typeof result.then === "function") {
+            result.then(resolve).catch(() => resolve("denied"));
+          }
+        });
+        if (permission !== "granted") {
+          toast("通知の許可が必要です。Safariの設定で許可してください");
+          return;
+        }
+        // 許可されたら再試行
+        const registration = await navigator.serviceWorker.ready;
+        pushSubscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: await getVapidPublicKey()
+        });
+        const retryResponse = await fetch(`${url}/subscribe`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscription: pushSubscription,
+            schedule: buildSchedule()
+          })
+        });
+        if (!retryResponse.ok) {
+          throw new Error("購読登録に失敗しました");
+        }
+        await syncScheduleToServer(true);
+        refreshPushStatus();
+        toast("通知を設定しました");
+        return;
+      } catch (retryError) {
+        console.error("再試行も失敗:", retryError);
+      }
+    }
+
+    toast(`通知の設定に失敗しました: ${error.message || "サーバーURLを確認してください"}`);
   }
 }
 
