@@ -64,7 +64,8 @@
           </label>
           <label class="field">
             <span>ノート名</span>
-            <input id="notebookNameInput" autocomplete="off" placeholder="メイン1冊目 / 解きなおし用">
+            <input id="notebookNameInput" list="notebookNameOptions" autocomplete="off" placeholder="メイン1冊目 / 解きなおし用">
+            <datalist id="notebookNameOptions"></datalist>
           </label>
           <label class="field">
             <span>番号</span>
@@ -107,6 +108,12 @@
           </label>
           <input class="search" id="searchInput" placeholder="教科・ノート名・番号・題名で検索">
         </div>
+        <label class="field">
+          <span>ノート名で絞り込み</span>
+          <select id="notebookFilter">
+            <option value="">すべてのノート</option>
+          </select>
+        </label>
         <div id="noteList" class="stack"></div>
         <p class="empty-state" id="emptyList">まだノートが登録されていません。</p>
       </section>

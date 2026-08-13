@@ -109,6 +109,7 @@ function setupStaticUi() {
   document.getElementById("buildSessionBtn").addEventListener("click", renderToday);
   document.getElementById("sortMode").addEventListener("change", renderList);
   document.getElementById("searchInput").addEventListener("input", renderList);
+  document.getElementById("notebookFilter").addEventListener("change", renderList);
   document.getElementById("noteForm").addEventListener("submit", addNote);
   document.getElementById("exportJsonBtn").addEventListener("click", exportJson);
   document.getElementById("exportIcsBtn").addEventListener("click", exportIcs);
@@ -162,6 +163,8 @@ function showScreen(name) {
 
 async function refresh() {
   notes = (await getAll(NOTE_STORE)).map(normalizeNote);
+  renderNotebookOptions();
+  renderNotebookFilter();
   renderToday();
   renderList();
 }
@@ -239,7 +242,11 @@ function renderList() {
   const host = document.getElementById("noteList");
   const query = document.getElementById("searchInput").value.trim().toLowerCase();
   const sortMode = document.getElementById("sortMode").value;
+  const notebookFilter = document.getElementById("notebookFilter").value;
   let visible = notes.filter((note) => `${note.subject} ${note.notebookName} ${note.number} ${note.title}`.toLowerCase().includes(query));
+  if (notebookFilter) {
+    visible = visible.filter((note) => note.notebookName === notebookFilter);
+  }
 
   visible = visible.sort((a, b) => {
     if (sortMode === "subject") return `${a.subject}${a.notebookName}${a.number}`.localeCompare(`${b.subject}${b.notebookName}${b.number}`, "ja");
@@ -347,10 +354,10 @@ function choosePracticeType(note, retention) {
 async function exportJson() {
   const payload = {
     exportedAt: new Date().toISOString(),
-    version: 1,
+    version: 2,
     settings,
-    notes: await getAll(NOTE_STORE),
-    reviewLogs: await getAll(LOG_STORE)
+    notes: (await getAll(NOTE_STORE)).map(normalizeNote),
+    reviewLogs: (await getAll(LOG_STORE)).map(normalizeReviewLog)
   };
   download(`note-review-backup-${toDateInput(new Date())}.json`, JSON.stringify(payload, null, 2), "application/json");
 }
@@ -358,21 +365,27 @@ async function exportJson() {
 async function importJson(event) {
   const file = event.target.files[0];
   if (!file) return;
-  const text = await file.text();
-  const payload = JSON.parse(text);
-  if (!Array.isArray(payload.notes) || !Array.isArray(payload.reviewLogs)) {
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const normalized = normalizeBackupPayload(payload);
+    if (!normalized) {
+      toast("復元できないJSONです");
+      return;
+    }
+    await Promise.all(normalized.notes.map((note) => put(NOTE_STORE, note)));
+    await Promise.all(normalized.reviewLogs.map((log) => put(LOG_STORE, log)));
+    if (normalized.settings) {
+      settings = { ...settings, ...normalized.settings };
+      await saveSettings();
+    }
+    await refresh();
+    toast("JSONから復元しました");
+  } catch (error) {
+    console.error(error);
     toast("復元できないJSONです");
-    return;
-  }
-  await Promise.all(payload.notes.map((note) => put(NOTE_STORE, note)));
-  await Promise.all(payload.reviewLogs.map((log) => put(LOG_STORE, log)));
-  if (payload.settings) {
-    settings = { ...settings, ...payload.settings };
-    await saveSettings();
   }
   event.target.value = "";
-  await refresh();
-  toast("JSONから復元しました");
 }
 
 function exportIcs() {
@@ -443,14 +456,103 @@ function registerServiceWorker() {
 }
 
 function normalizeNote(note) {
+  const now = new Date().toISOString();
+  const id = note.id || crypto.randomUUID();
+  const createdAt = safeIso(note.createdAt, now);
+  const updatedAt = safeIso(note.updatedAt, createdAt);
+  const firstStudiedAt = safeIso(note.firstStudiedAt, createdAt);
   return {
     ...note,
-    notebookName: note.notebookName || ""
+    id,
+    subject: String(note.subject || ""),
+    notebookName: String(note.notebookName || ""),
+    number: String(note.number || ""),
+    title: String(note.title || "無題"),
+    firstStudiedAt,
+    memo: String(note.memo || ""),
+    preferredPracticeTypes: normalizePracticeTypes(note.preferredPracticeTypes),
+    stability: Math.max(0.5, Number(note.stability || 1)),
+    nextReviewAt: safeIso(note.nextReviewAt, startOfDay(new Date()).toISOString()),
+    createdAt,
+    updatedAt
   };
+}
+
+function normalizeReviewLog(log) {
+  const now = new Date().toISOString();
+  return {
+    ...log,
+    id: log.id || crypto.randomUUID(),
+    noteItemId: log.noteItemId || log.noteId || "",
+    reviewedAt: safeIso(log.reviewedAt, now),
+    elapsedDays: Math.max(0, Number(log.elapsedDays || 0)),
+    practiceType: PRACTICE_TYPES.includes(log.practiceType) ? log.practiceType : "説明再生",
+    selfRating: clamp(Number(log.selfRating ?? 3), 0, 5),
+    estimatedRetention: clamp(Number(log.estimatedRetention ?? 0.8), 0, 1),
+    stabilityBefore: Math.max(0.5, Number(log.stabilityBefore || 1)),
+    stabilityAfter: Math.max(0.5, Number(log.stabilityAfter || 1)),
+    nextReviewAt: safeIso(log.nextReviewAt, now)
+  };
+}
+
+function normalizeBackupPayload(payload) {
+  const rawNotes = Array.isArray(payload?.notes)
+    ? payload.notes
+    : Array.isArray(payload)
+      ? payload
+      : null;
+  if (!rawNotes) return null;
+  return {
+    settings: payload?.settings || null,
+    notes: rawNotes.map(normalizeNote),
+    reviewLogs: Array.isArray(payload?.reviewLogs) ? payload.reviewLogs.map(normalizeReviewLog) : []
+  };
+}
+
+function normalizePracticeTypes(types) {
+  if (!Array.isArray(types)) return ["用語再生", "説明再生"];
+  const valid = types.filter((type) => PRACTICE_TYPES.includes(type));
+  return valid.length ? valid : ["用語再生", "説明再生"];
+}
+
+function renderNotebookOptions() {
+  const host = document.getElementById("notebookNameOptions");
+  host.innerHTML = "";
+  uniqueNotebookNames().forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    host.append(option);
+  });
+}
+
+function renderNotebookFilter() {
+  const select = document.getElementById("notebookFilter");
+  const current = select.value;
+  select.innerHTML = '<option value="">すべてのノート</option>';
+  uniqueNotebookNames().forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    select.append(option);
+  });
+  select.value = uniqueNotebookNames().includes(current) ? current : "";
 }
 
 function formatNoteLocation(note) {
   return [note.subject, note.notebookName, note.number].filter(Boolean).join(" / ");
+}
+
+function uniqueNotebookNames() {
+  return [...new Set(notes.map((note) => note.notebookName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
+function safeIso(value, fallback) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function avg(values) {

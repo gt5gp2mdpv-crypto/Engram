@@ -301,6 +301,10 @@ fieldset {
   align-self: end;
 }
 
+#notebookFilter {
+  max-width: 100%;
+}
+
 .card-actions {
   display: grid;
   grid-template-columns: 1fr auto;
