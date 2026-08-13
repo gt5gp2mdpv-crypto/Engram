@@ -605,8 +605,26 @@ async function enablePush() {
       }
     }
 
-    toast(`通知の設定に失敗しました: ${error.message || "サーバーURLを確認してください"}`);
+    toast(getPushErrorMessage(error, url));
   }
+}
+
+function getPushErrorMessage(error, url) {
+  const message = String(error?.message || error || "");
+  // CORS/ネットワークエラーの判別
+  if (message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("Network request failed")) {
+    return "サーバーに接続できません。\n①Renderで再デプロイしたか ②URLが正しいか を確認してください";
+  }
+  if (message.includes("vapid") || message.includes("VAPID")) {
+    return "VAPIDキーを取得できませんでした。サーバーが正しく再デプロイされているか確認してください";
+  }
+  if (message.includes("subscription") || message.includes("InvalidStateError")) {
+    return "購読登録に失敗しました。もう一度お試しください";
+  }
+  if (message.includes("NotAllowedError") || message.includes("PermissionDenied")) {
+    return "通知が許可されませんでした。Safariの設定で許可してください";
+  }
+  return message || "サーバーURLを確認してください";
 }
 
 async function getVapidPublicKey() {
