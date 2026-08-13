@@ -366,6 +366,27 @@ fieldset {
   line-height: 1.6;
 }
 
+.push-status {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.push-status p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.secondary {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
 .help-panel {
   margin-top: 12px;
 }

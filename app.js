@@ -25,8 +25,11 @@ let db;
 let notes = [];
 let settings = {
   targetRetention: 0.8,
-  calendarTime: "20:00"
+  pushServerUrl: "",
+  morningTime: "07:00",
+  eveningTime: "20:00"
 };
+let pushSubscription = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   db = await openDb();
@@ -34,6 +37,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupStaticUi();
   await refresh();
   registerServiceWorker();
+  await loadPushSubscription();
+  refreshPushStatus();
+  syncScheduleToServer();
 });
 
 function openDb() {
@@ -97,7 +103,9 @@ async function saveSettings() {
 function setupStaticUi() {
   document.getElementById("todayLabel").textContent = formatDate(new Date());
   document.getElementById("firstStudiedInput").value = toDateInput(new Date());
-  document.getElementById("calendarTime").value = settings.calendarTime;
+  document.getElementById("pushServerUrl").value = settings.pushServerUrl || "";
+  document.getElementById("morningTime").value = settings.morningTime || "07:00";
+  document.getElementById("eveningTime").value = settings.eveningTime || "20:00";
   document.getElementById("targetRetention").value = String(settings.targetRetention);
   renderPracticeChecks();
   renderPracticeGuide();
@@ -118,17 +126,35 @@ function setupStaticUi() {
   document.getElementById("notebookNameInput").addEventListener("input", renderNotebookChips);
   document.getElementById("noteForm").addEventListener("submit", addNote);
   document.getElementById("exportJsonBtn").addEventListener("click", exportJson);
-  document.getElementById("exportIcsBtn").addEventListener("click", exportIcs);
   document.getElementById("importJsonInput").addEventListener("change", importJson);
-  document.getElementById("calendarTime").addEventListener("change", async (event) => {
-    settings.calendarTime = event.target.value || "20:00";
-    await saveSettings();
-    toast("通知時刻を保存しました");
-  });
   document.getElementById("targetRetention").addEventListener("change", async (event) => {
     settings.targetRetention = Number(event.target.value);
     await saveSettings();
     toast("目標定着率を保存しました");
+  });
+  document.getElementById("pushServerUrl").addEventListener("change", async (event) => {
+    settings.pushServerUrl = event.target.value.trim();
+    await saveSettings();
+    toast("通知サーバーURLを保存しました");
+  });
+  document.getElementById("morningTime").addEventListener("change", async (event) => {
+    settings.morningTime = event.target.value || "07:00";
+    await saveSettings();
+    await syncScheduleToServer();
+    toast("朝の通知時刻を保存しました");
+  });
+  document.getElementById("eveningTime").addEventListener("change", async (event) => {
+    settings.eveningTime = event.target.value || "20:00";
+    await saveSettings();
+    await syncScheduleToServer();
+    toast("夜の通知時刻を保存しました");
+  });
+  document.getElementById("enablePushBtn").addEventListener("click", enablePush);
+  document.getElementById("disablePushBtn").addEventListener("click", disablePush);
+  document.getElementById("testPushBtn").addEventListener("click", sendTestPush);
+  document.getElementById("syncScheduleBtn").addEventListener("click", async () => {
+    await syncScheduleToServer(true);
+    toast("スケジュールを同期しました");
   });
 }
 
@@ -175,6 +201,7 @@ async function refresh() {
   renderNotebookChips();
   renderToday();
   renderList();
+  syncScheduleToServer();
 }
 
 async function addNote(event) {
@@ -400,55 +427,6 @@ async function importJson(event) {
   event.target.value = "";
 }
 
-function exportIcs() {
-  const now = new Date();
-  const until = addDays(now, 30);
-  const events = notes
-    .filter((note) => new Date(note.nextReviewAt) <= until)
-    .sort((a, b) => new Date(a.nextReviewAt) - new Date(b.nextReviewAt))
-    .map((note) => createIcsEvent(note));
-
-  if (!events.length) {
-    toast("30日以内の復習予定がありません");
-    return;
-  }
-
-  const content = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Note Review PWA//JA",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    ...events,
-    "END:VCALENDAR"
-  ].join("\r\n");
-  download(`note-review-calendar-${toDateInput(now)}.ics`, content, "text/calendar");
-}
-
-function createIcsEvent(note) {
-  const start = withTime(new Date(note.nextReviewAt), settings.calendarTime);
-  const end = new Date(start.getTime() + 20 * 60 * 1000);
-  const retention = Math.round(estimateRetention(note, start) * 100);
-  const practiceType = choosePracticeType(note, retention / 100);
-  const title = `復習: ${formatNoteLocation(note)} ${note.title}`;
-  const body = `${practiceType}。紙ノートを閉じて先に自力で思い出す。推定定着率 ${retention}%。`;
-  return [
-    "BEGIN:VEVENT",
-    `UID:${note.id}-${yyyymmdd(start)}@note-review-pwa`,
-    `DTSTAMP:${toIcsDate(new Date())}`,
-    `DTSTART:${toIcsDate(start)}`,
-    `DTEND:${toIcsDate(end)}`,
-    `SUMMARY:${escapeIcs(title)}`,
-    `DESCRIPTION:${escapeIcs(body)}`,
-    "BEGIN:VALARM",
-    "TRIGGER:PT0M",
-    "ACTION:DISPLAY",
-    `DESCRIPTION:${escapeIcs(title)}`,
-    "END:VALARM",
-    "END:VEVENT"
-  ].join("\r\n");
-}
-
 function download(filename, content, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -475,6 +453,271 @@ function registerServiceWorker() {
     });
   }).catch(() => {});
 }
+
+// ── Web Push通知 ──
+
+async function loadPushSubscription() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      pushSubscription = null;
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    pushSubscription = await registration.pushManager.getSubscription();
+  } catch (error) {
+    console.warn("購読情報の取得に失敗:", error);
+    pushSubscription = null;
+  }
+}
+
+async function enablePush() {
+  if (!("Notification" in window)) {
+    toast("この端末では通知を利用できません");
+    return;
+  }
+  if (Notification.permission === "denied") {
+    toast("Safariの設定から通知を許可してください");
+    return;
+  }
+  if (Notification.permission === "default") {
+    const result = await Notification.requestPermission();
+    if (result !== "granted") {
+      toast("通知が許可されませんでした");
+      return;
+    }
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    pushSubscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: await getVapidPublicKey()
+    });
+    // サーバーに購読登録
+    const url = settings.pushServerUrl.replace(/\/+$/, "");
+    if (!url) {
+      toast("通知サーバーURLを入力してください");
+      pushSubscription.unsubscribe().catch(() => {});
+      pushSubscription = null;
+      return;
+    }
+    const subscribeResponse = await fetch(`${url}/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscription: pushSubscription,
+        schedule: buildSchedule()
+      })
+    });
+    if (!subscribeResponse.ok) {
+      throw new Error("購読登録に失敗しました");
+    }
+    await syncScheduleToServer(true);
+    refreshPushStatus();
+    toast("通知を設定しました");
+  } catch (error) {
+    console.error("購読登録に失敗:", error);
+    toast("通知の設定に失敗しました。サーバーURLを確認してください");
+  }
+}
+
+async function getVapidPublicKey() {
+  const url = settings.pushServerUrl.replace(/\/+$/, "");
+  if (!url) throw new Error("サーバーURLが未設定です");
+  const response = await fetch(`${url}/vapid-public-key`);
+  if (!response.ok) throw new Error("サーバーからVAPIDキーを取得できませんでした");
+  const data = await response.json();
+  return urlBase64ToUint8Array(data.publicKey);
+}
+
+async function disablePush() {
+  try {
+    if (pushSubscription) {
+      if (settings.pushServerUrl) {
+        const url = settings.pushServerUrl.replace(/\/+$/, "");
+        await fetch(`${url}/unsubscribe`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: pushSubscription })
+        }).catch(() => {});
+      }
+      await pushSubscription.unsubscribe();
+    }
+    pushSubscription = null;
+  } catch (error) {
+    console.error("購読解除に失敗:", error);
+  }
+  refreshPushStatus();
+  toast("通知を停止しました");
+}
+
+async function sendTestPush() {
+  if (!pushSubscription) {
+    toast("先に「通知を許可する」を押してください");
+    return;
+  }
+  const url = settings.pushServerUrl.replace(/\/+$/, "");
+  if (!url) {
+    toast("通知サーバーURLを入力してください");
+    return;
+  }
+  try {
+    const response = await fetch(`${url}/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscription: pushSubscription,
+        title: "ノート復習",
+        body: "これはテスト通知です。設定が正常に完了しています。"
+      })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "送信に失敗しました");
+    }
+    toast("テスト通知を送信しました");
+  } catch (error) {
+    console.error("テスト送信失敗:", error);
+    toast(`テスト通知を送信できませんでした: ${error.message}`);
+  }
+}
+
+function buildSchedule() {
+  const schedule = [];
+  const now = new Date();
+  const today = startOfDay(now);
+  const dueNotes = notes.filter((note) => new Date(note.nextReviewAt) <= endOfDay(now));
+
+  if (!dueNotes.length) return schedule;
+
+  const dueSummary = getDueSummary(dueNotes);
+
+  const morning = withTime(today, settings.morningTime || "07:00");
+  if (morning > now) {
+    schedule.push({
+      time: morning.getTime(),
+      title: "📚 今日の復習リマインダー",
+      body: dueSummary,
+      url: "./"
+    });
+  }
+
+  const evening = withTime(today, settings.eveningTime || "20:00");
+  if (evening > now) {
+    schedule.push({
+      time: evening.getTime(),
+      title: "🌙 今夜の復習リマインダー",
+      body: dueSummary,
+      url: "./"
+    });
+  }
+
+  // 翌日以降も2日先まで通知をスケジュール（復習予定がある場合）
+  for (let offset = 1; offset <= 2; offset++) {
+    const day = addDays(today, offset);
+    const dayDue = notes.filter((note) => {
+      const next = startOfDay(new Date(note.nextReviewAt));
+      return next.getTime() === day.getTime();
+    });
+    if (!dayDue.length) continue;
+    const daySummary = getDueSummary(dayDue);
+    const dayMorning = withTime(day, settings.morningTime || "07:00");
+    const dayEvening = withTime(day, settings.eveningTime || "20:00");
+    schedule.push({
+      time: dayMorning.getTime(),
+      title: "📚 今日の復習リマインダー",
+      body: daySummary,
+      url: "./"
+    });
+    schedule.push({
+      time: dayEvening.getTime(),
+      title: "🌙 今夜の復習リマインダー",
+      body: daySummary,
+      url: "./"
+    });
+  }
+
+  return schedule;
+}
+
+function getDueSummary(dueNotes) {
+  const limited = dueNotes.slice(0, 5);
+  const lines = limited.map((note) => `${formatNoteLocation(note)} ${note.title}`).join("、");
+  const remaining = dueNotes.length - limited.length;
+  return `今日の復習が${dueNotes.length}件あります。${lines}${remaining > 0 ? ` ほか${remaining}件` : ""}`;
+}
+
+async function syncScheduleToServer(force = false) {
+  if (!pushSubscription || !settings.pushServerUrl) return;
+  const url = settings.pushServerUrl.replace(/\/+$/, "");
+  if (!url) return;
+
+  const schedule = buildSchedule();
+  try {
+    const response = await fetch(`${url}/update-schedule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscription: pushSubscription,
+        schedule
+      })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "同期に失敗しました");
+    }
+    if (force) {
+      const data = await response.json();
+      toast(`スケジュールを同期しました（${data.scheduled}件）`);
+    }
+  } catch (error) {
+    console.warn("スケジュール同期に失敗:", error);
+  }
+}
+
+function refreshPushStatus() {
+  const statusText = document.getElementById("pushStatusText");
+  const enableBtn = document.getElementById("enablePushBtn");
+  const disableBtn = document.getElementById("disablePushBtn");
+
+  if (!("Notification" in window)) {
+    statusText.textContent = "この端末では通知を利用できません。";
+    enableBtn.style.display = "none";
+    return;
+  }
+
+  if (Notification.permission === "denied") {
+    statusText.textContent = "通知がブロックされています。Safariの設定で許可してください。";
+    enableBtn.style.display = "none";
+    disableBtn.style.display = "none";
+    return;
+  }
+
+  if (pushSubscription) {
+    statusText.textContent = settings.pushServerUrl
+      ? `通知が有効です（${settings.morningTime || "07:00"} / ${settings.eveningTime || "20:00"}）`
+      : "通知サーバーURLを入力してください";
+    enableBtn.style.display = "none";
+    disableBtn.style.display = "";
+  } else {
+    statusText.textContent = "通知はまだ設定されていません。";
+    enableBtn.style.display = "";
+    disableBtn.style.display = "none";
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+// ── ユーティリティ ──
 
 function normalizeNote(note) {
   const now = new Date().toISOString();
@@ -681,18 +924,6 @@ function formatDate(date) {
 function toDateInput(date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
-}
-
-function toIcsDate(date) {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-}
-
-function yyyymmdd(date) {
-  return toIcsDate(date).slice(0, 8);
-}
-
-function escapeIcs(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 }
 
 function round(value, digits) {

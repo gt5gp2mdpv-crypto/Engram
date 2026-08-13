@@ -129,10 +129,35 @@
 
       <section class="screen" id="screen-settings" aria-labelledby="tab-settings">
         <div class="form-panel">
+          <h2>復習リマインダー</h2>
+          <div class="push-status" id="pushStatusBox">
+            <p id="pushStatusText">通知はまだ設定されていません。</p>
+          </div>
+          <button class="primary wide" type="button" id="enablePushBtn">通知を許可する</button>
+          <button class="secondary wide" type="button" id="disablePushBtn" style="display:none">通知を停止する</button>
           <label class="field">
-            <span>毎日の通知時刻</span>
-            <input id="calendarTime" type="time" value="20:00">
+            <span>通知サーバーURL</span>
+            <input id="pushServerUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://your-app.onrender.com">
           </label>
+          <label class="field">
+            <span>朝の通知時刻</span>
+            <input id="morningTime" type="time" value="07:00">
+          </label>
+          <label class="field">
+            <span>夜の通知時刻</span>
+            <input id="eveningTime" type="time" value="20:00">
+          </label>
+          <div class="button-grid">
+            <button type="button" id="testPushBtn">テスト通知を送る</button>
+            <button type="button" id="syncScheduleBtn">今すぐスケジュール同期</button>
+          </div>
+          <p class="note" id="pushNote">
+            通知を許可すると、毎日「朝と夜」に今日の復習をまとめて通知します。<br>
+            iPhone 16.4以降でホーム画面に追加したPWAで利用できます。
+          </p>
+        </div>
+        <div class="form-panel">
+          <h2>データ管理</h2>
           <label class="field">
             <span>目標定着率</span>
             <select id="targetRetention">
@@ -148,10 +173,9 @@
               JSON復元
               <input id="importJsonInput" type="file" accept="application/json,.json">
             </label>
-            <button type="button" id="exportIcsBtn">カレンダー出力</button>
           </div>
           <p class="note">
-            カレンダー出力前に、前回出力分を削除してから再登録してください。IndexedDBは通常のタスクキルでは残りますが、サイトデータ削除や容量不足では消えることがあります。
+            IndexedDBは通常のタスクキルでは残りますが、サイトデータ削除や容量不足では消えることがあります。
           </p>
         </div>
         <div class="help-panel">
@@ -160,8 +184,8 @@
             <li>Safariでこのページを開く。</li>
             <li>共有ボタンから「ホーム画面に追加」を選ぶ。</li>
             <li>ホーム画面のアイコンから起動する。</li>
-            <li>「カレンダー出力」でicsファイルを開き、iPhoneカレンダーに追加する。</li>
-            <li>通知音やロック画面表示はiPhoneのカレンダー通知設定で調整する。</li>
+            <li>設定タブで「通知を許可する」を押し、通知サーバーURLを入力する。</li>
+            <li>朝・夜の通知時刻を設定すると、毎日自動で復習リマインダーが届く。</li>
           </ol>
         </div>
       </section>
