@@ -1,4 +1,4 @@
-const CACHE_NAME = "note-review-pwa-v4";
+const CACHE_NAME = "note-review-pwa-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -44,6 +44,23 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // app.js と index.html は常にネットワークから取得（キャッシュ不整合を防ぐ）
+  const url = new URL(event.request.url);
+  const isCritical = url.pathname.endsWith("/app.js") || url.pathname.endsWith("/index.html") || url.pathname.endsWith("/sw.js");
+
+  if (isCritical) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   // その他のリソースはキャッシュファースト（オフライン対応）
   event.respondWith(
     caches.match(event.request).then((cached) => {
@@ -57,18 +74,47 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// ── Web Push通知受信 ──
 self.addEventListener("push", (event) => {
-  const data = event.data ? event.data.json() : {};
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    // JSONでない場合はプレーンテキスト
+  }
+
+  const title = payload.title || "ノート復習";
+  const body = payload.body || "今日の復習を確認しましょう。";
+  const url = payload.url || "./";
+  const icon = payload.icon || "./icon-192.png";
+  const badge = payload.badge || "./icon-192.png";
+
   event.waitUntil(
-    self.registration.showNotification(data.title || "ノート復習", {
-      body: data.body || "今日の復習を確認しましょう。",
-      icon: data.icon || "./icon-192.png",
-      badge: data.badge || "./icon-192.png"
+    self.registration.showNotification(title, {
+      body,
+      icon,
+      badge,
+      data: { url },
+      tag: `note-review-${Date.now()}`,
+      requireInteraction: false,
+      vibrate: [200, 100, 200]
     })
   );
 });
 
+// ── 通知タップでアプリを開く ──
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow("./"));
+  const url = event.notification.data?.url || "./";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
 });

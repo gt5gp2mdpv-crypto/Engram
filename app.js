@@ -101,12 +101,31 @@ async function saveSettings() {
 }
 
 function setupStaticUi() {
-  document.getElementById("todayLabel").textContent = formatDate(new Date());
-  document.getElementById("firstStudiedInput").value = toDateInput(new Date());
-  document.getElementById("pushServerUrl").value = settings.pushServerUrl || "";
-  document.getElementById("morningTime").value = settings.morningTime || "07:00";
-  document.getElementById("eveningTime").value = settings.eveningTime || "20:00";
-  document.getElementById("targetRetention").value = String(settings.targetRetention);
+  // 要素取得を安全に行うヘルパー
+  function safeGet(id) {
+    const el = document.getElementById(id);
+    if (!el) console.warn(`要素が見つかりません: #${id}`);
+    return el;
+  }
+
+  const todayLabel = safeGet("todayLabel");
+  if (todayLabel) todayLabel.textContent = formatDate(new Date());
+
+  const firstStudiedInput = safeGet("firstStudiedInput");
+  if (firstStudiedInput) firstStudiedInput.value = toDateInput(new Date());
+
+  const pushServerUrlInput = safeGet("pushServerUrl");
+  if (pushServerUrlInput) pushServerUrlInput.value = settings.pushServerUrl || "";
+
+  const morningTimeInput = safeGet("morningTime");
+  if (morningTimeInput) morningTimeInput.value = settings.morningTime || "07:00";
+
+  const eveningTimeInput = safeGet("eveningTime");
+  if (eveningTimeInput) eveningTimeInput.value = settings.eveningTime || "20:00";
+
+  const targetRetentionSelect = safeGet("targetRetention");
+  if (targetRetentionSelect) targetRetentionSelect.value = String(settings.targetRetention);
+
   renderPracticeChecks();
   renderPracticeGuide();
 
@@ -114,45 +133,76 @@ function setupStaticUi() {
     tab.addEventListener("click", () => showScreen(tab.dataset.screen));
   });
 
-  document.getElementById("buildSessionBtn").addEventListener("click", renderToday);
-  document.getElementById("sortMode").addEventListener("change", renderList);
-  document.getElementById("searchInput").addEventListener("input", renderList);
-  document.getElementById("subjectFilter").addEventListener("change", () => {
+  const buildSessionBtn = safeGet("buildSessionBtn");
+  if (buildSessionBtn) buildSessionBtn.addEventListener("click", renderToday);
+
+  const sortMode = safeGet("sortMode");
+  if (sortMode) sortMode.addEventListener("change", renderList);
+
+  const searchInput = safeGet("searchInput");
+  if (searchInput) searchInput.addEventListener("input", renderList);
+
+  const subjectFilter = safeGet("subjectFilter");
+  if (subjectFilter) subjectFilter.addEventListener("change", () => {
     renderNotebookFilter();
     renderList();
   });
-  document.getElementById("notebookFilter").addEventListener("change", renderList);
-  document.getElementById("subjectInput").addEventListener("input", renderNotebookChips);
-  document.getElementById("notebookNameInput").addEventListener("input", renderNotebookChips);
-  document.getElementById("noteForm").addEventListener("submit", addNote);
-  document.getElementById("exportJsonBtn").addEventListener("click", exportJson);
-  document.getElementById("importJsonInput").addEventListener("change", importJson);
-  document.getElementById("targetRetention").addEventListener("change", async (event) => {
+
+  const notebookFilter = safeGet("notebookFilter");
+  if (notebookFilter) notebookFilter.addEventListener("change", renderList);
+
+  const subjectInput = safeGet("subjectInput");
+  if (subjectInput) subjectInput.addEventListener("input", renderNotebookChips);
+
+  const notebookNameInput = safeGet("notebookNameInput");
+  if (notebookNameInput) notebookNameInput.addEventListener("input", renderNotebookChips);
+
+  const noteForm = safeGet("noteForm");
+  if (noteForm) noteForm.addEventListener("submit", addNote);
+
+  const exportJsonBtn = safeGet("exportJsonBtn");
+  if (exportJsonBtn) exportJsonBtn.addEventListener("click", exportJson);
+
+  const importJsonInput = safeGet("importJsonInput");
+  if (importJsonInput) importJsonInput.addEventListener("change", importJson);
+
+  if (targetRetentionSelect) targetRetentionSelect.addEventListener("change", async (event) => {
     settings.targetRetention = Number(event.target.value);
     await saveSettings();
     toast("目標定着率を保存しました");
   });
-  document.getElementById("pushServerUrl").addEventListener("change", async (event) => {
+
+  if (pushServerUrlInput) pushServerUrlInput.addEventListener("change", async (event) => {
     settings.pushServerUrl = event.target.value.trim();
     await saveSettings();
     toast("通知サーバーURLを保存しました");
   });
-  document.getElementById("morningTime").addEventListener("change", async (event) => {
+
+  if (morningTimeInput) morningTimeInput.addEventListener("change", async (event) => {
     settings.morningTime = event.target.value || "07:00";
     await saveSettings();
     await syncScheduleToServer();
     toast("朝の通知時刻を保存しました");
   });
-  document.getElementById("eveningTime").addEventListener("change", async (event) => {
+
+  if (eveningTimeInput) eveningTimeInput.addEventListener("change", async (event) => {
     settings.eveningTime = event.target.value || "20:00";
     await saveSettings();
     await syncScheduleToServer();
     toast("夜の通知時刻を保存しました");
   });
-  document.getElementById("enablePushBtn").addEventListener("click", enablePush);
-  document.getElementById("disablePushBtn").addEventListener("click", disablePush);
-  document.getElementById("testPushBtn").addEventListener("click", sendTestPush);
-  document.getElementById("syncScheduleBtn").addEventListener("click", async () => {
+
+  const enablePushBtn = safeGet("enablePushBtn");
+  if (enablePushBtn) enablePushBtn.addEventListener("click", enablePush);
+
+  const disablePushBtn = safeGet("disablePushBtn");
+  if (disablePushBtn) disablePushBtn.addEventListener("click", disablePush);
+
+  const testPushBtn = safeGet("testPushBtn");
+  if (testPushBtn) testPushBtn.addEventListener("click", sendTestPush);
+
+  const syncScheduleBtn = safeGet("syncScheduleBtn");
+  if (syncScheduleBtn) syncScheduleBtn.addEventListener("click", async () => {
     await syncScheduleToServer(true);
     toast("スケジュールを同期しました");
   });
