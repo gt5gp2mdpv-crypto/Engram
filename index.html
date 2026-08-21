@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1f6f68">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="ノート復習">
+  <meta name="apple-mobile-web-app-title" content="Engram">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>ノート復習</title>
+  <title>Engram</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -17,7 +17,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">忘却曲線ノート</p>
+        <p class="eyebrow">忘却曲線ノート-Engram-</p>
         <h1 id="screenTitle">今日の復習</h1>
       </div>
       <div class="today-pill" id="todayLabel"></div>
@@ -93,7 +93,10 @@
             <span>メモ</span>
             <textarea id="memoInput" rows="4" placeholder="紙ノートの位置、試験範囲、注意点など"></textarea>
           </label>
-          <button class="primary wide" type="submit">登録する</button>
+          <div class="button-grid">
+            <button class="primary wide" type="submit" id="noteSubmitBtn">登録する</button>
+            <button class="secondary wide" type="button" id="noteCancelBtn" style="display:none">キャンセル</button>
+          </div>
         </form>
       </section>
 
@@ -227,6 +230,7 @@
       <p class="memo"></p>
       <div class="card-actions">
         <button type="button" class="review-now">復習する</button>
+        <button type="button" class="edit">編集</button>
         <button type="button" class="delete danger">削除</button>
       </div>
     </article>

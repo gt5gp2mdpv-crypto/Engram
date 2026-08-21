@@ -30,6 +30,7 @@ let settings = {
   eveningTime: "20:00"
 };
 let pushSubscription = null;
+let editingNoteId = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   db = await openDb();
@@ -160,6 +161,9 @@ function setupStaticUi() {
   const noteForm = safeGet("noteForm");
   if (noteForm) noteForm.addEventListener("submit", addNote);
 
+  const noteCancelBtn = safeGet("noteCancelBtn");
+  if (noteCancelBtn) noteCancelBtn.addEventListener("click", cancelEditNote);
+
   const exportJsonBtn = safeGet("exportJsonBtn");
   if (exportJsonBtn) exportJsonBtn.addEventListener("click", exportJson);
 
@@ -258,8 +262,9 @@ async function addNote(event) {
   event.preventDefault();
   const selectedTypes = [...document.querySelectorAll("#practiceChecks input:checked")].map((input) => input.value);
   const now = new Date();
+  const existing = editingNoteId ? notes.find((note) => note.id === editingNoteId) : null;
   const note = {
-    id: crypto.randomUUID(),
+    id: existing ? existing.id : crypto.randomUUID(),
     subject: document.getElementById("subjectInput").value.trim(),
     notebookName: document.getElementById("notebookNameInput").value.trim(),
     number: document.getElementById("numberInput").value.trim(),
@@ -267,18 +272,61 @@ async function addNote(event) {
     firstStudiedAt: new Date(document.getElementById("firstStudiedInput").value).toISOString(),
     memo: document.getElementById("memoInput").value.trim(),
     preferredPracticeTypes: selectedTypes.length ? selectedTypes : ["用語再生", "説明再生"],
-    stability: 1,
-    nextReviewAt: startOfDay(now).toISOString(),
-    createdAt: now.toISOString(),
+    stability: existing ? existing.stability : 1,
+    nextReviewAt: existing ? existing.nextReviewAt : addDays(startOfDay(now), 1).toISOString(),
+    createdAt: existing ? existing.createdAt : now.toISOString(),
     updatedAt: now.toISOString()
   };
   await put(NOTE_STORE, note);
-  event.target.reset();
-  document.getElementById("firstStudiedInput").value = toDateInput(new Date());
-  renderPracticeChecks();
+  resetNoteForm();
   await refresh();
   showScreen("today");
-  toast("登録しました");
+  toast(existing ? "更新しました" : "登録しました");
+}
+
+function startEditNote(note) {
+  editingNoteId = note.id;
+  document.getElementById("subjectInput").value = note.subject;
+  document.getElementById("notebookNameInput").value = note.notebookName;
+  document.getElementById("numberInput").value = note.number;
+  document.getElementById("titleInput").value = note.title;
+  document.getElementById("firstStudiedInput").value = toDateInput(new Date(note.firstStudiedAt));
+  document.getElementById("memoInput").value = note.memo;
+  renderPracticeChecks();
+  document.querySelectorAll("#practiceChecks input").forEach((input) => {
+    input.checked = note.preferredPracticeTypes.includes(input.value);
+  });
+  renderNotebookChips();
+  updateNoteFormMode();
+  showScreen("add");
+  toast("編集モードです。内容を変更して「更新する」を押してください");
+}
+
+function cancelEditNote() {
+  resetNoteForm();
+  showScreen("list");
+  toast("編集をキャンセルしました");
+}
+
+function resetNoteForm() {
+  editingNoteId = null;
+  document.getElementById("noteForm").reset();
+  document.getElementById("firstStudiedInput").value = toDateInput(new Date());
+  renderPracticeChecks();
+  renderNotebookChips();
+  updateNoteFormMode();
+}
+
+function updateNoteFormMode() {
+  const submitBtn = document.getElementById("noteSubmitBtn");
+  const cancelBtn = document.getElementById("noteCancelBtn");
+  if (editingNoteId) {
+    submitBtn.textContent = "更新する";
+    cancelBtn.style.display = "";
+  } else {
+    submitBtn.textContent = "登録する";
+    cancelBtn.style.display = "none";
+  }
 }
 
 function renderToday() {
@@ -361,6 +409,7 @@ function renderNoteCard(note) {
     document.getElementById("reviewQueue").append(renderReviewCard(note, estimateRetention(note)));
     document.getElementById("emptyToday").style.display = "none";
   });
+  card.querySelector(".edit").addEventListener("click", () => startEditNote(note));
   card.querySelector(".delete").addEventListener("click", async () => {
     if (!confirm(`${formatNoteLocation(note)} ${note.title} を削除しますか？`)) return;
     const logs = (await getAll(LOG_STORE)).filter((log) => log.noteItemId === note.id);
@@ -673,7 +722,7 @@ async function sendTestPush() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         subscription: pushSubscription,
-        title: "ノート復習",
+        title: "Engram",
         body: "これはテスト通知です。設定が正常に完了しています。"
       })
     });

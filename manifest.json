@@ -1,6 +1,6 @@
 {
-  "name": "ノート復習",
-  "short_name": "ノート復習",
+  "name": "Engram",
+  "short_name": "Engram",
   "description": "紙ノートの復習予定と定着度を管理するPWA",
   "start_url": "./index.html",
   "scope": "./",

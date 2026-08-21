@@ -1,4 +1,4 @@
-const CACHE_NAME = "note-review-pwa-v6";
+const CACHE_NAME = "note-review-pwa-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -83,7 +83,7 @@ self.addEventListener("push", (event) => {
     // JSONでない場合はプレーンテキスト
   }
 
-  const title = payload.title || "ノート復習";
+  const title = payload.title || "Engram";
   const body = payload.body || "今日の復習を確認しましょう。";
   const url = payload.url || "./";
   const icon = payload.icon || "./icon-192.png";
